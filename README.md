@@ -289,7 +289,7 @@ The architecture is a practical implementation of ideas from:
 
 ## Author
 
-**Urvish Bhatt** — Software Engineer (Python · FastAPI · Django · AI Agents · R&D)
+**Urvish Bhatt** — Senior Software Engineer (Python · FastAPI · Django · AI Agents · R&D)
 
 - 📧 urvishh.bhatt@gmail.com
 - 🔗 [LinkedIn](https://www.linkedin.com/in/urvish-bhatt)
