@@ -1,0 +1,202 @@
+[
+  {
+    "id": "py_001",
+    "question": "Is Python compiled or interpreted?",
+    "expected_answer": "Python uses a hybrid execution model: source code is first compiled into bytecode (.pyc), which is then executed by the Python Virtual Machine (PVM). It is not a pure interpreter like Bash, nor a native compiler like C/C++.",
+    "expected_pages": [4],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_002",
+    "question": "If I write y = x for two variables, does y get a copy of x's value?",
+    "expected_answer": "No. Python copies the reference, not the object itself. Both x and y end up bound to the same underlying object, since variables are names bound to objects rather than memory boxes holding values.",
+    "expected_pages": [5],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_003",
+    "question": "What's the difference between break and continue in a loop?",
+    "expected_answer": "break terminates the loop immediately and skips all remaining iterations, exiting the nearest enclosing loop entirely. continue skips only the current iteration and moves on to the next iteration of the same loop.",
+    "expected_pages": [12],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_004",
+    "question": "Why are list comprehensions generally faster than an equivalent for loop with .append()?",
+    "expected_answer": "List comprehensions are implemented in C internally, which reduces Python-level overhead and avoids repeated attribute lookups such as calling .append() on every iteration.",
+    "expected_pages": [22],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_005",
+    "question": "Why must *args come before **kwargs in a function signature?",
+    "expected_answer": "Positional arguments must be collected before keyword arguments, so *args (which collects extra positional arguments into a tuple) has to appear before **kwargs (which collects extra keyword arguments into a dictionary).",
+    "expected_pages": [26],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_006",
+    "question": "Does __init__ create a new Python object?",
+    "expected_answer": "No. __init__ is a constructor method that runs automatically after the object has already been created. It only initializes instance variables and configures the object; it does not create it.",
+    "expected_pages": [41],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_007",
+    "question": "Are Python dataclasses immutable by default?",
+    "expected_answer": "No. Dataclasses are mutable by default. They only become immutable if you explicitly pass frozen=True when defining them.",
+    "expected_pages": [46],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_008",
+    "question": "What mechanism does a for loop actually use internally to iterate?",
+    "expected_answer": "A for loop uses the iterator protocol: it calls iter() on the iterable to get an iterator, then repeatedly calls next() on it, stopping when a StopIteration exception is raised. It does not use indexing internally.",
+    "expected_pages": [50],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_009",
+    "question": "What does functools.wraps do and why is it needed on a decorator?",
+    "expected_answer": "functools.wraps preserves the original wrapped function's metadata, such as __name__, __doc__, and annotations. Without it, the decorated function appears to tooling and debuggers as the wrapper function instead, which breaks introspection and debugging.",
+    "expected_pages": [55],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_010",
+    "question": "Why should raw strings be used when writing regex patterns in Python?",
+    "expected_answer": "Python treats backslash as an escape character in normal strings. Raw strings (r\"...\") prevent double escaping of backslashes, making regex patterns clearer and safer to write.",
+    "expected_pages": [59],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_011",
+    "question": "Why don't Python threads speed up CPU-heavy workloads?",
+    "expected_answer": "Because of the Global Interpreter Lock (GIL), which allows only one thread to execute Python bytecode at a time, preventing true parallel execution of CPU-bound work across threads.",
+    "expected_pages": [80],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_012",
+    "question": "Is async/await in Python faster than threading for CPU-bound tasks?",
+    "expected_answer": "No. Async is not faster than threading for CPU-bound tasks. Async excels specifically at high I/O concurrency, not at raw computation.",
+    "expected_pages": [81],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_013",
+    "question": "Where do Python objects actually live in memory, the stack or the heap?",
+    "expected_answer": "All Python objects live in the heap, managed by Python's memory manager, and persist until they are garbage collected. The stack only stores function call frames, local variables, and execution state.",
+    "expected_pages": [84],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_014",
+    "question": "Why should passwords be hashed instead of encrypted?",
+    "expected_answer": "Encryption requires a key and is reversible, so if the encryption key is compromised, passwords can be decrypted back to plaintext. Hashing has no reversible key, ensuring passwords are never stored in a retrievable form.",
+    "expected_pages": [95],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_015",
+    "question": "In the CAP theorem, is it possible to have a distributed system that is both Consistent and Available (CA)?",
+    "expected_answer": "No, not in a distributed system. CA is only possible in single-node systems where network partitions cannot occur, since partition tolerance is unavoidable once a system is distributed.",
+    "expected_pages": [98],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "direct"
+  },
+  {
+    "id": "py_016",
+    "question": "You need to retry a flaky network call a fixed number of times, and log each attempt and failure automatically without cluttering the business logic. What Python constructs would you combine to do this cleanly?",
+    "expected_answer": "A decorator to wrap the retry logic around the function (so retry behavior is reusable and separate from business logic, using functools.wraps to preserve the original function's metadata), combined with the logging module inside the wrapper to record each attempt and failure with severity levels and timestamps instead of using print statements.",
+    "expected_pages": [54, 55, 72],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "synthesis"
+  },
+  {
+    "id": "py_017",
+    "question": "How does Python's memory model explain why a mutable default argument like a list keeps accumulating values across separate function calls?",
+    "expected_answer": "Since Python objects live in the heap and variables are just references bound to objects, a mutable default argument (like items=[]) is created once when the function is defined, not on each call. Every call that doesn't override it shares and mutates that same underlying heap object, causing state to persist across calls. The fix is to default to None and create a new list inside the function body.",
+    "expected_pages": [84, 107],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "synthesis"
+  },
+  {
+    "id": "py_018",
+    "question": "For a large dataset that needs to be filtered and transformed without loading it all into memory, would a generator or a list comprehension be more appropriate, and why does that relate to how for loops iterate internally?",
+    "expected_answer": "A generator is more appropriate for large datasets, streams, or pipelines because it produces values lazily rather than materializing them all at once, keeping memory usage minimal. This works because a for loop internally uses the iterator protocol (iter()/next()) rather than indexing, so it can pull one lazily-produced value at a time from a generator instead of requiring the full collection to exist in memory upfront, as a list comprehension would.",
+    "expected_pages": [50, 107],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "synthesis"
+  },
+  {
+    "id": "py_019",
+    "question": "How would you design a class whose exact fields aren't known until runtime, and what Python object model concept makes this possible at all?",
+    "expected_answer": "You can use Python's type() function to dynamically create a class at runtime, passing the class name, base classes, and an attributes dictionary. This is possible because everything in Python is an object, including classes themselves, which are created by the metaclass 'type' -- Python's uniform object model is what enables this kind of dynamic, runtime class generation.",
+    "expected_pages": [88, 110],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "synthesis"
+  },
+  {
+    "id": "py_020",
+    "question": "In a distributed system that prioritizes strong consistency over availability during a network partition, would you expect it to use ACID guarantees or BASE properties, and why?",
+    "expected_answer": "It would use ACID-style guarantees, aligning with the CP (Consistency + Partition Tolerance) side of the CAP theorem, since it may reject requests during partitions to guarantee strong consistency. BASE properties (Basically Available, Soft State, Eventual Consistency) instead trade strict correctness for availability and scalability, which is the AP side of CAP -- the opposite tradeoff.",
+    "expected_pages": [98, 99],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "synthesis"
+  },
+  {
+    "id": "py_021",
+    "question": "What is Django's ORM lazy queryset evaluation strategy?",
+    "expected_answer": "This information is not present in the handbook.",
+    "expected_pages": [],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "unanswerable"
+  },
+  {
+    "id": "py_022",
+    "question": "How do you configure a Kubernetes readiness probe for a Python Flask service?",
+    "expected_answer": "This information is not present in the handbook.",
+    "expected_pages": [],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "unanswerable"
+  },
+  {
+    "id": "py_023",
+    "question": "How does Python's ctypes module interface with a Rust dynamic library?",
+    "expected_answer": "This information is not present in the handbook.",
+    "expected_pages": [],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "unanswerable"
+  },
+  {
+    "id": "py_024",
+    "question": "What is the release date of Python 3.13 and what are its headline features?",
+    "expected_answer": "This information is not present in the handbook.",
+    "expected_pages": [],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "unanswerable"
+  },
+  {
+    "id": "py_025",
+    "question": "How do you set up NumPy's BLAS backend for GPU-accelerated matrix multiplication?",
+    "expected_answer": "This information is not present in the handbook.",
+    "expected_pages": [],
+    "source_document": "python_interview_handbook.pdf",
+    "category": "unanswerable"
+  }
+]
