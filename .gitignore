@@ -10,3 +10,4 @@ wheels/
 .venv
 .env
 .idea
+PROJECT_STATE_SUMMARY.md

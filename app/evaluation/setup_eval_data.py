@@ -25,8 +25,8 @@ import httpx
 
 # ---- Config -----------------------------------------------------------
 BASE_URL = "http://localhost:8000/api/v1"
-EVAL_EMAIL = "eval-runner@internal.local"
-EVAL_PASSWORD = "eval-runner-password-change-me"  # noqa: S105 — eval-only fixture account
+EVAL_EMAIL = "testevals@yopmail.com"
+EVAL_PASSWORD = "Test105*"  # noqa: S105 — eval-only fixture account
 
 THIS_DIR = Path(__file__).parent
 FIXTURES_DIR = THIS_DIR / "fixtures"
