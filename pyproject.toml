@@ -34,3 +34,8 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.49",
     "uvicorn[standard]>=0.47.0",
 ]
+
+[dependency-groups]
+eval = [
+    "ragas>=0.3,<0.4",
+]

@@ -42,9 +42,9 @@ async def run_rag_query(
     session_id: str,
     query: str,
     history_messages: List[Any],  # ORM ChatMessage objects
-) -> Tuple[str, List[Dict[str, Any]]]:
+) -> Tuple[str, List[Dict[str, Any]], List[str]]:
     """
-    Non-streaming query. Returns (answer_text, sources).
+    Non-streaming query. Returns (answer_text, citations, retrieved_contexts).
     """
 
     safe_query = sanitize_text(query)
@@ -74,12 +74,15 @@ async def run_rag_query(
     ]
     answer = assistant_messages[-1].content if assistant_messages else "No answer generated."
     sources = final_state.get("sources", [])
+    retrieved_contexts = [
+        chunk.get("text", "") for chunk in final_state.get("reranked_chunks", [])
+    ]
 
     logger.info(
         f"Session={session_id} | Sources={len(sources)} | "
         f"Answer length={len(answer)} chars"
     )
-    return answer, sources
+    return answer, sources, retrieved_contexts
 
 
 async def stream_rag_query(

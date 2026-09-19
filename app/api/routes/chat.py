@@ -194,7 +194,7 @@ async def chat(
 
     else:
         # --- Non-streaming path ---
-        answer, sources = await run_rag_query(
+        answer, sources, retrieved_contexts = await run_rag_query(
             user_id=user_id,
             session_id=session_id,
             query=payload.message,
@@ -210,11 +210,14 @@ async def chat(
         db.add(assistant_msg)
         await db.flush()
 
-        return {
+        response = {
             "session_id": session_id,
             "answer": answer,
             "sources": sources,
         }
+        if payload.include_retrieved_contexts:
+            response["retrieved_contexts"] = retrieved_contexts
+        return response
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

@@ -73,6 +73,7 @@ class SessionOut(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     stream: bool = True
+    include_retrieved_contexts: bool = False
 
 
 class SourceChunk(BaseModel):
