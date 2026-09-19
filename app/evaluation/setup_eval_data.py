@@ -5,8 +5,8 @@ Provisions the evaluation fixture data for RAG evals:
   1. Registers (or logs in) a dedicated eval user, isolated from real user data.
   2. Uploads each fixture PDF in app/evaluation/fixtures/ through the app's own
      /documents/upload endpoint (so ingestion is tested end-to-end, same as prod).
-  3. Polls each document until Celery ingestion finishes.
-  4. Creates a single chat session to run eval queries against later.
+  3. Polls each document until its persisted ingestion status is ready.
+  4. Writes a provisioned-document manifest for the RAGAS runner.
   5. Writes app/evaluation/eval_context.json — the manifest the RAGAS runner
      reads to know which user/session/document IDs to use.
 
@@ -33,7 +33,9 @@ FIXTURES_DIR = THIS_DIR / "fixtures"
 OUTPUT_MANIFEST = THIS_DIR / "eval_context.json"
 
 POLL_INTERVAL_SECONDS = 2
-POLL_TIMEOUT_SECONDS = 120
+# The handbook can span multiple rate-limited embedding batches. Keep this
+# comfortably above the worker's inter-batch pauses on a first ingestion.
+POLL_TIMEOUT_SECONDS = 900
 # ------------------------------------------------------------------------
 
 
@@ -63,7 +65,12 @@ async def ensure_eval_user(client: httpx.AsyncClient) -> str:
 async def upload_fixture(
     client: httpx.AsyncClient, headers: dict, pdf_path: Path
 ) -> str:
-    """Upload one fixture PDF, poll until ingestion is ready, return document_id."""
+    """Upload one fixture PDF, poll until its persisted status is ready.
+
+    The task-status endpoint exposes Celery states (for example ``SUCCESS``),
+    while the document endpoint exposes the application states ``ready`` and
+    ``failed`` that determine whether the fixture is usable for evaluation.
+    """
     with pdf_path.open("rb") as f:
         upload_resp = await client.post(
             "/documents/upload",
@@ -76,32 +83,22 @@ async def upload_fixture(
 
     elapsed = 0
     while elapsed < POLL_TIMEOUT_SECONDS:
-        status_resp = await client.get(
-            f"/documents/{document_id}/task-status", headers=headers
-        )
-        status_resp.raise_for_status()
-        status = status_resp.json().get("status")
+        document_resp = await client.get(f"/documents/{document_id}", headers=headers)
+        document_resp.raise_for_status()
+        document = document_resp.json()
+        status = document.get("status")
         if status == "ready":
             print(f"[setup]   {pdf_path.name} ready (document_id={document_id})")
             return document_id
         if status == "failed":
-            raise RuntimeError(f"Ingestion failed for {pdf_path.name}: {status_resp.json()}")
+            raise RuntimeError(
+                f"Ingestion failed for {pdf_path.name}: "
+                f"{document.get('error_message', 'no error message returned')}"
+            )
         await asyncio.sleep(POLL_INTERVAL_SECONDS)
         elapsed += POLL_INTERVAL_SECONDS
 
     raise TimeoutError(f"Ingestion for {pdf_path.name} did not finish within {POLL_TIMEOUT_SECONDS}s")
-
-
-async def create_eval_session(client: httpx.AsyncClient, headers: dict) -> str:
-    session_resp = await client.post(
-        "/sessions",
-        headers=headers,
-        json={"title": "eval-run"},
-    )
-    session_resp.raise_for_status()
-    session_id = session_resp.json()["id"]
-    print(f"[setup] Created eval session: {session_id}")
-    return session_id
 
 
 async def main() -> None:
@@ -123,11 +120,8 @@ async def main() -> None:
             document_id = await upload_fixture(client, headers, pdf_path)
             documents[pdf_path.name] = document_id
 
-        session_id = await create_eval_session(client, headers)
-
     manifest = {
         "eval_email": EVAL_EMAIL,
-        "session_id": session_id,
         "documents": documents,  # filename -> document_id
     }
     OUTPUT_MANIFEST.write_text(json.dumps(manifest, indent=2))
