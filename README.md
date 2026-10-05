@@ -22,7 +22,7 @@ POST /documents/upload
   → Create DB record (status: pending)
   → Dispatch Celery task via Redis
       → PyPDFLoader → RecursiveCharacterTextSplitter
-      → Gemini text-embedding-004 (task_type: retrieval_document)
+      → Gemini gemini-embedding-001 (task_type: retrieval_document)
       → Pinecone upsert (namespace = user_id)
   → Update DB record (status: ready, chunk_count, page_count)
 ```
@@ -34,7 +34,7 @@ POST /sessions/{id}/chat
   → Load conversation history from PostgreSQL (LangGraph AsyncPostgresSaver)
   → [retrieve node]  Pinecone query → top-20 chunks (user's namespace only)
   → [rerank node]    Pinecone Inference API (bge-reranker-v2-m3) → top-5 chunks
-  → [generate node]  Gemini 2.0 Flash with history + reranked context
+  → [generate node]  Gemini 3.7 Flash with history + reranked context
   → Stream SSE tokens back to client
   → Persist assistant message + sources to DB
 ```
@@ -43,18 +43,18 @@ POST /sessions/{id}/chat
 
 ```
 ┌──────────────┐     HTTP/SSE      ┌─────────────────────────────────┐
-│   Client     │ ◄────────────────► │         FastAPI (async)          │
-└──────────────┘                   └───────┬─────────────┬────────────┘
+│   Client     │ ◄───────────────► │         FastAPI (async)         │
+└──────────────┘                   └───────┬─────────────┬───────────┘
                                            │             │
                               ┌────────────▼──┐   ┌──────▼──────────┐
                               │  LangGraph    │   │  Celery Worker  │
                               │  StateGraph   │   │  (ingestion)    │
-                              └──┬─────────┬─┘   └──────┬──────────┘
-                                 │         │            │
-                        ┌────────▼─┐  ┌────▼──────┐  ┌─▼──────┐
-                        │ Pinecone │  │ PostgreSQL │  │ Redis  │
-                        │ (vectors)│  │ (history)  │  │(queue) │
-                        └──────────┘  └───────────┘  └────────┘
+                              └──┬──────────┬─┘   └──────┬──────────┘
+                                 │          │            │
+                        ┌────────▼─┐  ┌─────▼───────┐  ┌─▼──────┐
+                        │ Pinecone │  │ PostgreSQL  │  │ Redis  │
+                        │ (vectors)│  │ (history)   │  │(queue) │
+                        └──────────┘  └─────────────┘  └────────┘
 ```
 
 ---
@@ -65,8 +65,8 @@ POST /sessions/{id}/chat
 |---|---|
 | API Framework | FastAPI + Uvicorn |
 | Agent Orchestration | LangGraph `StateGraph` |
-| LLM | Google Gemini 2.0 Flash |
-| Embeddings | Gemini `text-embedding-004` (768-dim) |
+| LLM | Google Gemini 3.7 Flash |
+| Embeddings | Gemini `gemini-embedding-001` (768-dim) |
 | Vector Store | Pinecone (serverless) |
 | Reranking | Pinecone Inference API (`bge-reranker-v2-m3`) |
 | Conversation Memory | LangGraph `AsyncPostgresSaver` |
@@ -138,7 +138,7 @@ rag-agent/
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.12+
 - Docker + Docker Compose
 - [Pinecone account](https://www.pinecone.io/) (free tier works)
 - [Google AI Studio API key](https://aistudio.google.com/) (Gemini)
@@ -283,7 +283,7 @@ The architecture is a practical implementation of ideas from:
 
 ---
 
-> 🐳 **Docker support** is planned for a future release. For now, use the local setup instructions.
+> 🐳 **Docker support** files are included in the repository but are still a work in progress. For now, we recommend following the local setup instructions.
 
 ---
 
