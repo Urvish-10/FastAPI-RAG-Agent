@@ -1,5 +1,8 @@
+import re
+import threading
 import time
-from typing import List, Dict, Any, Optional
+from collections import deque
+from typing import Deque, List, Dict, Any, Optional
 from pinecone import Pinecone, ServerlessSpec
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
@@ -12,10 +15,33 @@ logger = get_logger(__name__)
 _pinecone_client: Optional[Pinecone] = None
 _embeddings: Optional[GoogleGenerativeAIEmbeddings] = None
 
-# Gemini free tier: 100 embed requests/minute
-# We embed in batches of this size and pause between batches
-EMBED_BATCH_SIZE = 80          # stay safely under the 100/min limit
-EMBED_RATE_LIMIT_PAUSE = 62   # seconds to wait between batches (62s > 60s window)
+# Gemini free tier allows 100 embedContent requests/minute, and each text in a
+# batch counts as one request. We keep a sliding window of recent request
+# timestamps (shared across all documents in this process) and wait whenever
+# the next batch would exceed settings.EMBED_REQUESTS_PER_MIN.
+EMBED_BATCH_SIZE = 80
+_EMBED_WINDOW_S = 60.0
+_embed_times: Deque[float] = deque()
+_embed_lock = threading.Lock()
+
+
+def _wait_for_embed_budget(n: int) -> None:
+    """Block until `n` more embedding requests fit in the per-minute budget."""
+    limit = settings.EMBED_REQUESTS_PER_MIN
+    if limit <= 0:
+        return
+    n = min(n, limit)
+    with _embed_lock:
+        while True:
+            now = time.monotonic()
+            while _embed_times and now - _embed_times[0] >= _EMBED_WINDOW_S:
+                _embed_times.popleft()
+            if len(_embed_times) + n <= limit:
+                _embed_times.extend([now] * n)
+                return
+            wait = _EMBED_WINDOW_S - (now - _embed_times[0]) + 0.5
+            logger.info(f"Embedding rate limit: waiting {wait:.0f}s")
+            time.sleep(max(wait, 0.5))
 
 
 def get_pinecone_client() -> Pinecone:
@@ -52,17 +78,32 @@ def _ensure_index_exists(pc: Pinecone) -> None:
         logger.info(f"Pinecone index '{settings.PINECONE_INDEX_NAME}' already exists.")
 
 
+def _retry_delay_s(message: str) -> float:
+    """Parse 'Please retry in 30.8s' from a Gemini 429; default to a full window."""
+    m = re.search(r"retry in ([0-9.]+)s", message)
+    return float(m.group(1)) + 1.0 if m else _EMBED_WINDOW_S + 1.0
+
+
+def _embed_batch_with_retry(embedder, batch: List[str], max_retries: int = 5):
+    """embed_documents with retry on 429s (quota used by other processes, etc.)."""
+    for attempt in range(max_retries + 1):
+        try:
+            return embedder.embed_documents(batch)
+        except Exception as e:
+            msg = str(e)
+            if attempt == max_retries or not ("RESOURCE_EXHAUSTED" in msg or "429" in msg):
+                raise
+            delay = _retry_delay_s(msg)
+            logger.warning(f"Gemini embedding quota hit; retrying in {delay:.0f}s "
+                           f"(attempt {attempt + 1}/{max_retries})")
+            time.sleep(delay)
+
+
 def _embed_with_rate_limit(texts: List[str]) -> List[List[float]]:
     """
-    Embed texts in batches, pausing between batches to respect
-    the Gemini free tier rate limit (100 requests/minute).
-
-    Each call to embed_documents() counts as 1 request regardless
-    of how many texts are in the batch — so we batch up to
-    EMBED_BATCH_SIZE texts per call and pause between calls.
-
-    On paid tier you can raise EMBED_BATCH_SIZE to 500+ and set
-    EMBED_RATE_LIMIT_PAUSE to 0.
+    Embed texts in batches of EMBED_BATCH_SIZE, waiting as needed to stay under
+    settings.EMBED_REQUESTS_PER_MIN. On a paid tier raise that setting (or set 0
+    to disable throttling).
     """
     embedder = get_embeddings()
     all_embeddings: List[List[float]] = []
@@ -70,23 +111,12 @@ def _embed_with_rate_limit(texts: List[str]) -> List[List[float]]:
 
     for i in range(0, len(texts), EMBED_BATCH_SIZE):
         batch = texts[i: i + EMBED_BATCH_SIZE]
-        batch_num = i // EMBED_BATCH_SIZE + 1
-
+        _wait_for_embed_budget(len(batch))
         logger.info(
-            f"Embedding batch {batch_num}/{total_batches} "
+            f"Embedding batch {i // EMBED_BATCH_SIZE + 1}/{total_batches} "
             f"({len(batch)} chunks, total so far: {i + len(batch)}/{len(texts)})"
         )
-
-        batch_embeddings = embedder.embed_documents(batch)
-        all_embeddings.extend(batch_embeddings)
-
-        # Pause between batches (not after the last one)
-        if i + EMBED_BATCH_SIZE < len(texts):
-            logger.info(
-                f"Rate limit pause: waiting {EMBED_RATE_LIMIT_PAUSE}s "
-                f"before next embedding batch..."
-            )
-            time.sleep(EMBED_RATE_LIMIT_PAUSE)
+        all_embeddings.extend(_embed_batch_with_retry(embedder, batch))
 
     return all_embeddings
 
@@ -99,7 +129,7 @@ def upsert_chunks(
     """
     Embed and upsert a list of chunks into Pinecone.
 
-    Embedding is rate-limited to stay within Gemini free tier (100 req/min).
+    Embedding is throttled by a sliding window (settings.EMBED_REQUESTS_PER_MIN).
     Pinecone upsert is batched separately (max 100 vectors per upsert call).
 
     Each chunk dict: {
@@ -116,8 +146,7 @@ def upsert_chunks(
     texts = [c["text"] for c in chunks]
     logger.info(
         f"Starting embedding for {len(texts)} chunks "
-        f"(namespace={namespace}, "
-        f"batches of {EMBED_BATCH_SIZE} with {EMBED_RATE_LIMIT_PAUSE}s pause)"
+        f"(namespace={namespace}, batches of {EMBED_BATCH_SIZE})"
     )
 
     # Embed with rate limiting

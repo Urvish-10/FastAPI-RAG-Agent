@@ -10,3 +10,7 @@ wheels/
 .venv
 .env
 .idea
+docs
+# RAG eval outputs
+eval_results/
+app/evaluation/eval_context.json

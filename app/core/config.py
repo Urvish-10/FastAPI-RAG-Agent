@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     GEMINI_CHAT_MODEL: str = "gemini-3.5-flash-lite"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_EMBEDDING_DIMENSIONS: int = 768
+    # Embedding requests/min budget (free tier = 100, each text counts). 0 disables throttling.
+    EMBED_REQUESTS_PER_MIN: int = 90
 
     # Pinecone Rerank (uses same PINECONE_API_KEY, no extra key needed)
     PINECONE_RERANK_MODEL: str = "bge-reranker-v2-m3"
@@ -39,6 +41,10 @@ class Settings(BaseSettings):
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     MAX_CONTEXT_TOKENS: int = 8000  # Limit context sent to LLM
+
+    # Evaluation
+    EVAL_NAMESPACE: str = "eval"        # Pinecone namespace used by RAG evals
+    EVAL_JUDGE_MODEL: str = "gemma-4-31b-it"  # LLM judge; must differ from the chat model. Free tier gives ~20 req/day per Gemini model, Gemma has no such cap
 
     # File storage
     UPLOAD_DIR: str = "/tmp/rag_uploads"

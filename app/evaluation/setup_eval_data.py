@@ -29,7 +29,7 @@ EVAL_EMAIL = "eval-runner@internal.local"
 EVAL_PASSWORD = "eval-runner-password-change-me"  # noqa: S105 — eval-only fixture account
 
 THIS_DIR = Path(__file__).parent
-FIXTURES_DIR = THIS_DIR / "fixtures"
+FIXTURES_DIR = THIS_DIR.parents[1] / "docs"
 OUTPUT_MANIFEST = THIS_DIR / "eval_context.json"
 
 POLL_INTERVAL_SECONDS = 2

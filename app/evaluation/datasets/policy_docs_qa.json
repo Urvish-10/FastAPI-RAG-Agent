@@ -1,0 +1,519 @@
+[
+  {
+    "id": "q_001",
+    "category": "direct",
+    "question": "How many hours of PTO does an Acme employee with 4 years of tenure accrue per pay period?",
+    "expected_answer": "Employees with 3-5 years of tenure get 20 days (160 hours) per year, accruing 6.67 hours per semi-monthly pay period.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 1,
+        "contains": "6.67 hours"
+      }
+    ]
+  },
+  {
+    "id": "q_002",
+    "category": "direct",
+    "question": "How many unused PTO days can an Acme employee carry over into the next calendar year?",
+    "expected_answer": "A maximum of 5 unused PTO days (40 hours). Any balance above 5 days on December 31 is forfeited, unless the department head and HR grant a written exception.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 1,
+        "contains": "maximum of 5 unused PTO days"
+      }
+    ]
+  },
+  {
+    "id": "q_003",
+    "category": "direct",
+    "question": "What are the eligibility requirements for FMLA leave at Acme Corp?",
+    "expected_answer": "The employee must have worked at Acme for at least 12 months and logged at least 1,250 hours in the preceding 12-month period.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 3,
+        "contains": "1,250 hours"
+      }
+    ]
+  },
+  {
+    "id": "q_004",
+    "category": "direct",
+    "question": "How much paid parental leave does Acme offer, and who qualifies?",
+    "expected_answer": "12 weeks at 100% of regular base salary for birth, adoption or foster placement, for full-time employees with at least 6 months of continuous employment.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 4,
+        "contains": "12 weeks of paid parental leave"
+      }
+    ]
+  },
+  {
+    "id": "q_005",
+    "category": "direct",
+    "question": "Who has to approve an Acme business expense of $1,200?",
+    "expected_answer": "Expenses between $501 and $2,500 need the department head and the VP of Finance; anything over $500 also needs pre-approval.",
+    "evidence": [
+      {
+        "document": "expense-reimbursement-policy.pdf",
+        "page": 1,
+        "contains": "$501 - $2,500"
+      }
+    ]
+  },
+  {
+    "id": "q_006",
+    "category": "direct",
+    "question": "What is the maximum Acme will reimburse for meals per day on domestic business travel?",
+    "expected_answer": "The daily maximum is $100 for domestic travel (breakfast $20, lunch $30, dinner $50), excluding team dinners.",
+    "evidence": [
+      {
+        "document": "expense-reimbursement-policy.pdf",
+        "page": 2,
+        "contains": "Daily maximum: $100 domestic"
+      }
+    ]
+  },
+  {
+    "id": "q_007",
+    "category": "direct",
+    "question": "What are Acme's core working hours?",
+    "expected_answer": "10:00 AM to 3:00 PM in the employee's designated time zone, regardless of work arrangement.",
+    "evidence": [
+      {
+        "document": "remote-work-policy.pdf",
+        "page": 2,
+        "contains": "10:00 AM to 3:00 PM"
+      }
+    ]
+  },
+  {
+    "id": "q_008",
+    "category": "direct",
+    "question": "How much is the monthly internet stipend for remote employees at Acme, and who receives it?",
+    "expected_answer": "$75 per month, paid to all remote and hybrid employees to offset internet and utilities costs.",
+    "evidence": [
+      {
+        "document": "remote-work-policy.pdf",
+        "page": 3,
+        "contains": "monthly $75 internet and utilities stipend"
+      }
+    ]
+  },
+  {
+    "id": "q_009",
+    "category": "direct",
+    "question": "On which days do hybrid Engineering employees at Acme have to be in the office?",
+    "expected_answer": "Tuesday and Thursday.",
+    "evidence": [
+      {
+        "document": "remote-work-policy.pdf",
+        "page": 6,
+        "contains": "Engineering Tuesday, Thursday"
+      }
+    ]
+  },
+  {
+    "id": "q_010",
+    "category": "direct",
+    "question": "What is Acme's 401(k) company match?",
+    "expected_answer": "Acme matches 100% of the first 4% of salary contributed; the match vests over 3 years (1/3 per year of service).",
+    "evidence": [
+      {
+        "document": "benefits-overview.pdf",
+        "page": 2,
+        "contains": "matches 100% of the first 4%"
+      }
+    ]
+  },
+  {
+    "id": "q_011",
+    "category": "direct",
+    "question": "How much does Acme contribute annually to an HSA for family HDHP enrollment?",
+    "expected_answer": "$1,500 per year for family HDHP enrollment (individual enrollment gets $750), deposited quarterly.",
+    "evidence": [
+      {
+        "document": "benefits-overview.pdf",
+        "page": 1,
+        "contains": "$1,500 annually for family HDHP enrollment"
+      }
+    ]
+  },
+  {
+    "id": "q_012",
+    "category": "direct",
+    "question": "What is the maximum tuition reimbursement Acme provides per calendar year?",
+    "expected_answer": "$5,250 per calendar year, for full-time employees with at least 1 year of tenure, with a grade of B or better, and a 12-month commitment to stay.",
+    "evidence": [
+      {
+        "document": "benefits-overview.pdf",
+        "page": 4,
+        "contains": "$5,250 per calendar year"
+      }
+    ]
+  },
+  {
+    "id": "q_013",
+    "category": "direct",
+    "question": "On what date is Independence Day observed at Acme in 2026?",
+    "expected_answer": "Friday, July 3, 2026, because July 4 falls on a Saturday.",
+    "evidence": [
+      {
+        "document": "holiday-schedule.pdf",
+        "page": 1,
+        "contains": "July 3 (observed)"
+      }
+    ]
+  },
+  {
+    "id": "q_014",
+    "category": "direct",
+    "question": "Does Acme allow SMS-based multi-factor authentication?",
+    "expected_answer": "No. SMS-based MFA is not permitted because of SIM-swap vulnerabilities; hardware security keys (preferred) and authenticator apps are approved.",
+    "evidence": [
+      {
+        "document": "information-security-policy.pdf",
+        "page": 2,
+        "contains": "SMS-based MFA is not permitted"
+      }
+    ]
+  },
+  {
+    "id": "q_015",
+    "category": "direct",
+    "question": "How quickly does Acme revoke system access after an employee leaves the company?",
+    "expected_answer": "Within 4 hours of separation, whether voluntary or involuntary.",
+    "evidence": [
+      {
+        "document": "information-security-policy.pdf",
+        "page": 4,
+        "contains": "revoked within 4 hours"
+      }
+    ]
+  },
+  {
+    "id": "q_016",
+    "category": "direct",
+    "question": "How long does Acme retain company emails?",
+    "expected_answer": "7 years, in accordance with the Data Retention Schedule, with legal holds overriding normal retention.",
+    "evidence": [
+      {
+        "document": "acceptable-use-policy.pdf",
+        "page": 4,
+        "contains": "retained for 7 years"
+      }
+    ]
+  },
+  {
+    "id": "q_017",
+    "category": "direct",
+    "question": "What is the value limit for gifts an Acme employee may accept from clients or vendors?",
+    "expected_answer": "Nominal gifts valued at $50 or less; gifts above $50 must be reported to the manager, and cash or cash equivalents may never be accepted.",
+    "evidence": [
+      {
+        "document": "code-of-conduct.pdf",
+        "page": 4,
+        "contains": "valued at $50 or less"
+      }
+    ]
+  },
+  {
+    "id": "q_018",
+    "category": "direct",
+    "question": "How often does an Acme onboarding buddy meet a new hire during week 1?",
+    "expected_answer": "Daily, for 15 minutes.",
+    "evidence": [
+      {
+        "document": "onboarding-guide.pdf",
+        "page": 6,
+        "contains": "Week 1 Daily (15 min)"
+      }
+    ]
+  },
+  {
+    "id": "q_019",
+    "category": "direct",
+    "question": "What typical merit increase does an Acme employee rated 4 (Exceeds Expectations) receive?",
+    "expected_answer": "Typically 4-6%.",
+    "evidence": [
+      {
+        "document": "performance-review-policy.pdf",
+        "page": 3,
+        "contains": "4 - Exceeds Expectations 4-6%"
+      }
+    ]
+  },
+  {
+    "id": "q_020",
+    "category": "direct",
+    "question": "How long does an Acme employee have to appeal a performance rating?",
+    "expected_answer": "15 business days from the review meeting, by written appeal to HR.",
+    "evidence": [
+      {
+        "document": "performance-review-policy.pdf",
+        "page": 7,
+        "contains": "within 15 business days of their review meeting"
+      }
+    ]
+  },
+  {
+    "id": "q_021",
+    "category": "direct",
+    "question": "According to the Public Counsel handbook, what overtime rate applies to hours worked beyond 12 in one workday?",
+    "expected_answer": "Double the employee's regular rate of pay.",
+    "evidence": [
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 12,
+        "contains": "Overtime at the rate of double"
+      }
+    ]
+  },
+  {
+    "id": "q_022",
+    "category": "direct",
+    "question": "According to the Public Counsel handbook, how fast does paid sick leave accrue?",
+    "expected_answer": "One hour of paid sick leave for every 30 hours worked, capped at 48 hours or six scheduled workdays, whichever is greater.",
+    "evidence": [
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 15,
+        "contains": "one hour of paid sick leave for every 30 hours"
+      }
+    ]
+  },
+  {
+    "id": "q_023",
+    "category": "direct",
+    "question": "What cap does the Public Counsel handbook place on accrued vacation time?",
+    "expected_answer": "Accrued vacation may not exceed twice the annual vacation allotment; accruals stop at the cap and resume once it drops below.",
+    "evidence": [
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 14,
+        "contains": "may not exceed twice the annual vacation"
+      }
+    ]
+  },
+  {
+    "id": "q_024",
+    "category": "direct",
+    "question": "Per the Public Counsel handbook, when must non-exempt employees receive an unpaid meal period?",
+    "expected_answer": "Non-exempt employees who work more than five hours in a day get an unpaid 30 [or 60] minute meal period starting no later than the end of the fifth hour.",
+    "evidence": [
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 11,
+        "contains": "more than five hours in a day"
+      }
+    ]
+  },
+  {
+    "id": "q_025",
+    "category": "synthesis",
+    "question": "What are Acme's password length and rotation requirements?",
+    "expected_answer": "Passwords must be at least 14 characters and changed every 90 days (plus complexity rules, no reuse of the last 12, lockout after 5 failed attempts).",
+    "evidence": [
+      {
+        "document": "information-security-policy.pdf",
+        "page": 1,
+        "contains": "Minimum length: 14 characters"
+      },
+      {
+        "document": "information-security-policy.pdf",
+        "page": 2,
+        "contains": "Passwords must be changed every 90 days"
+      }
+    ]
+  },
+  {
+    "id": "q_026",
+    "category": "synthesis",
+    "question": "How many floating holidays do full-time and part-time Acme employees each get?",
+    "expected_answer": "Full-time employees get 2 floating holidays per calendar year; part-time employees get 1.",
+    "evidence": [
+      {
+        "document": "holiday-schedule.pdf",
+        "page": 2,
+        "contains": "receives 2 floating holidays per calendar year"
+      },
+      {
+        "document": "holiday-schedule.pdf",
+        "page": 4,
+        "contains": "1 floating holiday per calendar year"
+      }
+    ]
+  },
+  {
+    "id": "q_027",
+    "category": "synthesis",
+    "question": "What is Acme's annual professional development budget and what approvals does spending it need?",
+    "expected_answer": "$2,000 per employee per year, covering conferences, courses, certifications and books; it needs pre-approval from the manager and HR.",
+    "evidence": [
+      {
+        "document": "expense-reimbursement-policy.pdf",
+        "page": 4,
+        "contains": "Annual budget per employee: $2,000"
+      },
+      {
+        "document": "benefits-overview.pdf",
+        "page": 4,
+        "contains": "$2,000 annual professional development budget"
+      }
+    ]
+  },
+  {
+    "id": "q_028",
+    "category": "synthesis",
+    "question": "Can a brand-new Acme employee work remotely, and when does that become possible?",
+    "expected_answer": "Not at first: new hires must complete the 90-day onboarding period on-site; the 90-day review then determines eligibility for hybrid or remote work (also requiring a 'Meets Expectations' rating and manager approval).",
+    "evidence": [
+      {
+        "document": "remote-work-policy.pdf",
+        "page": 2,
+        "contains": "New employees must complete their 90-day onboarding period on-site"
+      },
+      {
+        "document": "onboarding-guide.pdf",
+        "page": 5,
+        "contains": "Determines eligibility for hybrid/remote work arrangements"
+      }
+    ]
+  },
+  {
+    "id": "q_029",
+    "category": "synthesis",
+    "question": "If an Acme company holiday falls during my approved PTO, is it deducted from my PTO balance?",
+    "expected_answer": "No. The holiday does not count against the employee's PTO balance.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 6,
+        "contains": "that holiday does not count against the employee's PTO balance"
+      },
+      {
+        "document": "holiday-schedule.pdf",
+        "page": 3,
+        "contains": "the holiday is not deducted from the employee's PTO balance"
+      }
+    ]
+  },
+  {
+    "id": "q_030",
+    "category": "synthesis",
+    "question": "If I lose a laptop containing Acme company data, who do I notify and how fast is the remote wipe?",
+    "expected_answer": "Report it immediately to IT Security (security@acmecorp.com, extension x4700, or the 24/7 hotline (555) 867-5309); IT Security starts a remote wipe and password reset within 1 hour.",
+    "evidence": [
+      {
+        "document": "information-security-policy.pdf",
+        "page": 3,
+        "contains": "initiate a remote wipe and password reset within 1 hour"
+      },
+      {
+        "document": "information-security-policy.pdf",
+        "page": 6,
+        "contains": "Lost or stolen devices containing company data"
+      }
+    ]
+  },
+  {
+    "id": "q_031",
+    "category": "synthesis",
+    "question": "How does Acme's sick leave policy compare with the Public Counsel handbook's?",
+    "expected_answer": "Acme front-loads 10 sick days (80 hours) each year and does not carry unused sick leave over or pay it out. Public Counsel accrues 1 hour per 30 hours worked up to a cap of 48 hours (or six workdays), and unused accrued sick leave carries over.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 2,
+        "contains": "10 sick days (80 hours)"
+      },
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 3,
+        "contains": "does not carry over"
+      },
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 15,
+        "contains": "48 hours or six regularly-scheduled workdays"
+      }
+    ]
+  },
+  {
+    "id": "q_032",
+    "category": "synthesis",
+    "question": "Compare paid bereavement leave for a spouse's death at Acme and at Public Counsel.",
+    "expected_answer": "Acme grants up to 5 consecutive business days of paid bereavement leave for an immediate family member; the Public Counsel handbook provides up to 4 days of paid bereavement leave for regular full-time employees.",
+    "evidence": [
+      {
+        "document": "pto-and-leave-policy.pdf",
+        "page": 4,
+        "contains": "up to 5 consecutive business days of paid bereavement leave"
+      },
+      {
+        "document": "public_counsel_employee_handbook.pdf",
+        "page": 28,
+        "contains": "Up to 4 days paid bereavement leave"
+      }
+    ]
+  },
+  {
+    "id": "q_033",
+    "category": "unanswerable",
+    "question": "What is Acme's employee stock purchase plan (ESPP) discount?",
+    "expected_answer": "Not covered; the documents only mention equity refresh grants for high performers and give no ESPP details.",
+    "evidence": []
+  },
+  {
+    "id": "q_034",
+    "category": "unanswerable",
+    "question": "How do I request a sabbatical at Acme?",
+    "expected_answer": "Not covered in any of the documents.",
+    "evidence": []
+  },
+  {
+    "id": "q_035",
+    "category": "unanswerable",
+    "question": "Which insurance carrier does the Public Counsel handbook name for health insurance?",
+    "expected_answer": "Not specified; the handbook leaves the carrier and start date as a placeholder.",
+    "evidence": []
+  },
+  {
+    "id": "q_036",
+    "category": "unanswerable",
+    "question": "What relocation assistance does Acme offer to employees who move cities?",
+    "expected_answer": "Not covered in any of the documents.",
+    "evidence": []
+  },
+  {
+    "id": "q_037",
+    "category": "unanswerable",
+    "question": "What is the street address of Acme Corp's headquarters?",
+    "expected_answer": "Not covered in any of the documents.",
+    "evidence": []
+  },
+  {
+    "id": "q_038",
+    "category": "unanswerable",
+    "question": "How much paid bereavement leave does Acme give for the death of a pet?",
+    "expected_answer": "Not covered; bereavement leave only addresses immediate and extended family members.",
+    "evidence": []
+  },
+  {
+    "id": "q_039",
+    "category": "unanswerable",
+    "question": "Which holidays does Acme observe in 2027?",
+    "expected_answer": "Not available; the 2027 holiday schedule had not been published (it was due by November 1, 2026).",
+    "evidence": []
+  },
+  {
+    "id": "q_040",
+    "category": "unanswerable",
+    "question": "What is the capital city of Australia?",
+    "expected_answer": "Out of scope: not covered in any of the documents.",
+    "evidence": []
+  }
+]
