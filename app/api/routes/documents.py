@@ -1,9 +1,10 @@
+import asyncio
 import os
 import uuid
 import aiofiles
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -34,28 +35,38 @@ async def upload_document(
     Upload a PDF document. Returns immediately with status=pending.
     Processing happens asynchronously via Celery.
     """
-    # Validate content type
+    # Validate content type (client-supplied; real check is the magic bytes below)
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
-
-    # Read and validate file size
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit",
-        )
 
     user_id = current_user["sub"]
     document_id = str(uuid.uuid4())
 
-    # Save file to disk for Celery worker
+    # Stream to disk in chunks, enforcing the size cap without buffering the file
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
     safe_filename = f"{document_id}.pdf"
     file_path = os.path.join(settings.UPLOAD_DIR, safe_filename)
 
-    async with aiofiles.open(file_path, "wb") as f:
-        await f.write(content)
+    size = 0
+    try:
+        async with aiofiles.open(file_path, "wb") as f:
+            header = await file.read(5)
+            if header != b"%PDF-":
+                raise HTTPException(status_code=400, detail="File is not a valid PDF")
+            size = len(header)
+            await f.write(header)
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File exceeds {settings.MAX_FILE_SIZE_MB}MB limit",
+                    )
+                await f.write(chunk)
+    except BaseException:
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise
 
     # Create DB record
     doc = Document(
@@ -63,7 +74,7 @@ async def upload_document(
         user_id=user_id,
         filename=safe_filename,
         original_filename=file.filename,
-        file_size_bytes=len(content),
+        file_size_bytes=size,
         status=DocumentStatus.PENDING,
     )
     db.add(doc)
@@ -87,8 +98,8 @@ async def upload_document(
 async def list_documents(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
 ):
     """List all documents for the authenticated user."""
     user_id = current_user["sub"]
@@ -150,11 +161,21 @@ async def delete_document(
     user_id = current_user["sub"]
     doc = await _get_user_doc(document_id, user_id, db)
 
-    # Remove from Pinecone
+    # An in-flight ingestion task would re-upsert vectors after we delete them
+    if doc.status in (DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value):
+        raise HTTPException(
+            status_code=409,
+            detail="Document is still being processed; try again once it is ready or failed",
+        )
+
+    # Remove vectors first; if that fails keep the DB row so the delete can be retried
     try:
-        delete_document_chunks(document_id=document_id, namespace=user_id)
+        await asyncio.to_thread(
+            delete_document_chunks, document_id=document_id, namespace=user_id
+        )
     except Exception as e:
-        logger.warning(f"Failed to delete Pinecone vectors for {document_id}: {e}")
+        logger.error(f"Failed to delete Pinecone vectors for {document_id}: {e}")
+        raise HTTPException(status_code=502, detail="Failed to delete document vectors")
 
     await db.delete(doc)
 

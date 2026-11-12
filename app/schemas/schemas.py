@@ -73,6 +73,8 @@ class SessionOut(BaseModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     stream: bool = True
+    # Optional: restrict retrieval to these documents
+    document_ids: Optional[List[str]] = Field(default=None, max_length=50)
 
 
 class SourceChunk(BaseModel):

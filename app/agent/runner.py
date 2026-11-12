@@ -1,78 +1,75 @@
 """
 Agent runner - called by API routes.
 
-Handles:
-- Building RAGState from session history + new message
-- Invoking the graph (non-streaming) or running retrieval + streaming generation
-- Returning final answer + sources
+Both the streaming and non-streaming paths run the same compiled LangGraph.
+Conversation history lives in the Postgres checkpointer (thread_id = session_id),
+so only the NEW user message is passed in on each call.
 """
 from __future__ import annotations
 
 import json
-from typing import List, Dict, Any, AsyncIterator, Tuple, Optional
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
-from app.agent.graph import (
-    get_graph,
-    generate_node_streaming,
-    retrieve_node,
-    rerank_node,
-    RAGState,
-)
+from app.agent.graph import get_graph, RAGState
 from app.core.logging import get_logger
 from app.services.pdf_processor import sanitize_text
 
 logger = get_logger(__name__)
 
 
-def _build_lc_messages(db_messages: List[Any]) -> list:
-    """Convert DB ChatMessage ORM objects → LangChain message objects."""
-    lc = []
-    for m in db_messages:
-        if m.role == "user":
-            lc.append(HumanMessage(content=m.content))
-        elif m.role == "assistant":
-            lc.append(AIMessage(content=m.content))
-    return lc
+def _text_of(content: Any) -> str:
+    """Normalise LangChain message content (str or list of blocks) to plain text."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict) and block.get("type") == "text":
+                parts.append(block.get("text", ""))
+        return "".join(parts)
+    return ""
 
 
-async def run_rag_query(
-    user_id: str,
-    session_id: str,
-    query: str,
-    history_messages: List[Any],  # ORM ChatMessage objects
-) -> Tuple[str, List[Dict[str, Any]]]:
-    """
-    Non-streaming query. Returns (answer_text, sources).
-    """
-
+def _initial_state(
+    user_id: str, query: str, document_ids: Optional[List[str]] = None
+) -> RAGState:
     safe_query = sanitize_text(query)
-
-
-    graph = get_graph()
-    lc_messages = _build_lc_messages(history_messages)
-    lc_messages.append(HumanMessage(content=safe_query))
-
-    config = {"configurable": {"thread_id": session_id}}
-
-    initial_state: RAGState = {
-        "messages": lc_messages,
+    return {
+        # The checkpointer supplies prior turns; add_messages appends this one.
+        "messages": [HumanMessage(content=safe_query)],
         "user_id": user_id,
-        "query": query,
+        # Per-request fields are reset every turn
+        "query": safe_query,
+        "document_ids": document_ids,
         "raw_chunks": [],
         "reranked_chunks": [],
         "sources": [],
         "context": "",
     }
 
-    final_state = await graph.ainvoke(initial_state, config=config)
 
-    # Extract assistant answer
-    assistant_messages = [
-        m for m in final_state["messages"] if isinstance(m, AIMessage)
-    ]
-    answer = assistant_messages[-1].content if assistant_messages else "No answer generated."
+def _config(session_id: str) -> dict:
+    return {"configurable": {"thread_id": session_id}}
+
+
+async def run_rag_query(
+    user_id: str,
+    session_id: str,
+    query: str,
+    document_ids: Optional[List[str]] = None,
+) -> Tuple[str, List[Dict[str, Any]]]:
+    """Non-streaming query. Returns (answer_text, sources)."""
+    graph = get_graph()
+    final_state = await graph.ainvoke(
+        _initial_state(user_id, query, document_ids), config=_config(session_id)
+    )
+
+    ai_messages = [m for m in final_state["messages"] if isinstance(m, AIMessage)]
+    answer = _text_of(ai_messages[-1].content) if ai_messages else "No answer generated."
     sources = final_state.get("sources", [])
 
     logger.info(
@@ -86,54 +83,44 @@ async def stream_rag_query(
     user_id: str,
     session_id: str,
     query: str,
-    history_messages: List[Any],
+    document_ids: Optional[List[str]] = None,
 ) -> AsyncIterator[str]:
     """
-    Streaming query.
+    Streaming query through the compiled graph.
 
     Yields Server-Sent Events strings:
       - data: {"type": "token", "content": "..."}
       - data: {"type": "sources", "sources": [...]}
       - data: {"type": "done"}
     """
+    graph = get_graph()
+    sources: List[Dict[str, Any]] = []
+    token_count = 0
 
-    safe_query = sanitize_text(query)
+    async for mode, payload in graph.astream(
+        _initial_state(user_id, query, document_ids),
+        config=_config(session_id),
+        stream_mode=["messages", "updates"],
+    ):
+        if mode == "messages":
+            chunk, metadata = payload
+            if (
+                metadata.get("langgraph_node") == "generate"
+                and isinstance(chunk, AIMessageChunk)
+            ):
+                text = _text_of(chunk.content)
+                if text:
+                    token_count += 1
+                    yield f"data: {json.dumps({'type': 'token', 'content': text})}\n\n"
+        elif mode == "updates":
+            rerank_update = payload.get("rerank")
+            if rerank_update:
+                sources = rerank_update.get("sources", [])
 
-    lc_messages = _build_lc_messages(history_messages)
-    lc_messages.append(HumanMessage(content=safe_query))
-
-    # Run retrieval + reranking synchronously first (these are fast)
-    partial_state: RAGState = {
-        "messages": lc_messages,
-        "user_id": user_id,
-        "query": query,
-        "raw_chunks": [],
-        "reranked_chunks": [],
-        "sources": [],
-        "context": "",
-    }
-
-    # Retrieve
-    retrieve_result = retrieve_node(partial_state)
-    partial_state.update(retrieve_result)
-
-    # Rerank
-    rerank_result = rerank_node(partial_state)
-    partial_state.update(rerank_result)
-
-    sources = partial_state.get("sources", [])
-
-    # Stream generation
-    full_response = []
-    async for token in generate_node_streaming(partial_state):
-        full_response.append(token)
-        yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
-
-    # Emit sources after generation completes
     yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
     yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     logger.info(
         f"Stream complete: session={session_id} | "
-        f"tokens={len(full_response)} | sources={len(sources)}"
+        f"chunks={token_count} | sources={len(sources)}"
     )

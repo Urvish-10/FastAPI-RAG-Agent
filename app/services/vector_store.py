@@ -32,6 +32,7 @@ def get_embeddings() -> GoogleGenerativeAIEmbeddings:
         _embeddings = GoogleGenerativeAIEmbeddings(
             model=settings.GEMINI_EMBEDDING_MODEL,
             google_api_key=settings.GEMINI_API_KEY,
+            output_dimensionality=settings.GEMINI_EMBEDDING_DIMENSIONS,
         )
     return _embeddings
 
@@ -153,16 +154,17 @@ def query_chunks(
     query: str,
     namespace: str,
     top_k: int = 20,
+    document_ids: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """
-    Embed query and retrieve top_k similar chunks from the user's namespace.
+    Embed query and retrieve top_k similar chunks from the user's namespace,
+    optionally restricted to specific documents.
     Returns list of {id, score, text, metadata} dicts.
     """
     pc = get_pinecone_client()
     index = pc.Index(settings.PINECONE_INDEX_NAME)
     embedder = get_embeddings()
 
-    # query_embedding = embedder.embed_query(query)
     query = sanitize_text(query)
     query_embedding = embedder.embed_query(query)
 
@@ -171,6 +173,7 @@ def query_chunks(
         top_k=top_k,
         namespace=namespace,
         include_metadata=True,
+        filter={"document_id": {"$in": document_ids}} if document_ids else None,
     )
 
     matches = []

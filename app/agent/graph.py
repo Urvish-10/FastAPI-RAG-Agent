@@ -2,7 +2,7 @@
 LangGraph RAG Agent
 
 Graph flow:
-  START → retrieve → rerank → generate → END
+  START → rewrite → retrieve → rerank → generate → END
 
 The graph is compiled once at startup.
 Each conversation uses a unique thread_id (session_id) so
@@ -10,7 +10,8 @@ PostgresSaver checkpoints isolate history per session.
 """
 from __future__ import annotations
 
-from typing import Annotated, List, Dict, Any, Optional, AsyncIterator
+import asyncio
+from typing import Annotated, List, Dict, Any, Optional
 from typing_extensions import TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
@@ -36,6 +37,8 @@ class RAGState(TypedDict):
     # Set per request, not persisted in checkpoint
     user_id: str
     query: str
+    # Optional restriction of retrieval to specific documents
+    document_ids: Optional[List[str]]
     # Filled by retrieve node
     raw_chunks: List[Dict[str, Any]]
     # Filled by rerank node
@@ -73,23 +76,93 @@ If no context is provided, politely inform the user that no documents have been 
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
-def retrieve_node(state: RAGState) -> dict:
-    """Query Pinecone for top-K chunks using the user's question."""
+# Max prior messages sent to the LLM. The checkpointer stores the full thread;
+# we only window what goes into the prompt.
+MAX_HISTORY_MESSAGES = 20
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            b if isinstance(b, str) else b.get("text", "")
+            for b in content
+            if isinstance(b, str) or (isinstance(b, dict) and b.get("type") == "text")
+        )
+    return ""
+
+
+def _build_system_message(context: str) -> SystemMessage:
+    if context:
+        return SystemMessage(
+            content=(
+                f"{SYSTEM_PROMPT}\n\n"
+                f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
+            )
+        )
+    return SystemMessage(content=SYSTEM_PROMPT)
+
+
+def _window_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """Keep the most recent messages, starting on a human turn."""
+    window = messages[-MAX_HISTORY_MESSAGES:]
+    for i, m in enumerate(window):
+        if isinstance(m, HumanMessage):
+            return window[i:]
+    return window
+
+
+REWRITE_PROMPT = """Rewrite the user's latest question as a standalone search query, \
+resolving pronouns and references using the conversation. Do not answer it. \
+Output only the rewritten query."""
+
+
+async def rewrite_node(state: RAGState) -> dict:
+    """Turn follow-up questions into standalone retrieval queries."""
+    messages = state.get("messages", [])
+    if len(messages) <= 1:
+        return {}
+
+    convo = "\n".join(
+        f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
+        for m in _window_messages(messages)[-6:]
+        if isinstance(m, (HumanMessage, AIMessage))
+    )
+    try:
+        resp = await _get_llm().ainvoke(
+            [SystemMessage(content=REWRITE_PROMPT), HumanMessage(content=convo)]
+        )
+        rewritten = _content_text(resp.content).strip()
+    except Exception as e:  # fall back to the raw question
+        logger.warning(f"Query rewrite failed, using original: {e}")
+        return {}
+
+    if not rewritten:
+        return {}
+    logger.info("Query rewritten for retrieval")
+    return {"query": rewritten}
+
+
+async def retrieve_node(state: RAGState) -> dict:
+    """Query Pinecone for top-K chunks (sync SDK calls run in a worker thread)."""
     query = state["query"]
     user_id = state["user_id"]
 
-    logger.info(f"Retrieving chunks for user={user_id} query='{query[:60]}...'")
+    logger.info(f"Retrieving chunks for user={user_id}")
 
-    raw_chunks = query_chunks(
+    raw_chunks = await asyncio.to_thread(
+        query_chunks,
         query=query,
         namespace=user_id,
         top_k=settings.RETRIEVAL_TOP_K,
+        document_ids=state.get("document_ids"),
     )
 
     return {"raw_chunks": raw_chunks}
 
 
-def rerank_node(state: RAGState) -> dict:
+async def rerank_node(state: RAGState) -> dict:
     """Rerank retrieved chunks with Pinecone Inference API, then build context string."""
     query = state["query"]
     raw_chunks = state.get("raw_chunks", [])
@@ -98,12 +171,17 @@ def rerank_node(state: RAGState) -> dict:
         logger.warning("No chunks to rerank — skipping")
         return {"reranked_chunks": [], "context": "", "sources": []}
 
-    reranked = rerank_chunks(
+    reranked = await asyncio.to_thread(
+        rerank_chunks,
         query=query,
         chunks=raw_chunks,
         top_n=settings.RERANK_TOP_N,
     )
 
+    reranked = [
+        c for c in reranked
+        if c.get("rerank_score", 0.0) >= settings.RERANK_MIN_SCORE
+    ]
     context, sources = build_context_string(reranked)
 
     return {
@@ -113,60 +191,18 @@ def rerank_node(state: RAGState) -> dict:
     }
 
 
-def generate_node(state: RAGState) -> dict:
-    """Generate answer using Gemini with conversation history + retrieved context."""
-    context = state.get("context", "")
-    messages = state.get("messages", [])
-
-    llm = _get_llm(streaming=False)
-
-    # Build system message with context injected
-    if context:
-        system_content = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
-    else:
-        system_content = SYSTEM_PROMPT
-
-    system_msg = SystemMessage(content=system_content)
-
-    # Compose: system + full history (history already contains the current user message)
-    full_messages = [system_msg] + messages
-
-    logger.info(f"Generating answer. History length: {len(messages)} messages")
-
-    response = llm.invoke(full_messages)
-
-    return {"messages": [response]}
-
-
-async def generate_node_streaming(
-    state: RAGState,
-) -> AsyncIterator[str]:
+async def generate_node(state: RAGState) -> dict:
     """
-    Streaming version — yields token strings.
-    Called directly by the API route, not part of the compiled graph.
+    Generate the answer with Gemini. Uses ainvoke; when the graph is run with
+    stream_mode="messages", LangGraph surfaces the LLM tokens as they arrive.
     """
-    context = state.get("context", "")
-    messages = state.get("messages", [])
-
+    messages = _window_messages(state.get("messages", []))
     llm = _get_llm(streaming=True)
 
-    if context:
-        system_content = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
-    else:
-        system_content = SYSTEM_PROMPT
+    logger.info(f"Generating answer. Prompt history: {len(messages)} messages")
 
-    system_msg = SystemMessage(content=system_content)
-    full_messages = [system_msg] + messages
-
-    async for chunk in llm.astream(full_messages):
-        if chunk.content:
-            yield chunk.content
+    response = await llm.ainvoke([_build_system_message(state.get("context", ""))] + messages)
+    return {"messages": [response]}
 
 
 # ── Graph compilation ─────────────────────────────────────────────────────────
@@ -174,11 +210,13 @@ async def generate_node_streaming(
 def build_graph(checkpointer: AsyncPostgresSaver) -> StateGraph:
     graph = StateGraph(RAGState)
 
+    graph.add_node("rewrite", rewrite_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("rerank", rerank_node)
     graph.add_node("generate", generate_node)
 
-    graph.add_edge(START, "retrieve")
+    graph.add_edge(START, "rewrite")
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "rerank")
     graph.add_edge("rerank", "generate")
     graph.add_edge("generate", END)

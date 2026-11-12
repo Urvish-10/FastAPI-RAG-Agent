@@ -44,7 +44,10 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql+asyncpg://raguser:ragpass@postgres:5432/ragdb
+      # Sync URL: Celery, Alembic, LangGraph checkpointer (psycopg)
+      DATABASE_URL: postgresql://raguser:ragpass@postgres:5432/ragdb
+      # Async URL: FastAPI / SQLAlchemy (asyncpg)
+      DATABASE_URL_ASYNC: postgresql+asyncpg://raguser:ragpass@postgres:5432/ragdb
     depends_on:
       postgres:
         condition: service_healthy
@@ -71,7 +74,10 @@ services:
     env_file: .env
     environment:
       REDIS_URL: redis://redis:6379/0
-      DATABASE_URL: postgresql+asyncpg://raguser:ragpass@postgres:5432/ragdb
+      # Sync URL: Celery, Alembic, LangGraph checkpointer (psycopg)
+      DATABASE_URL: postgresql://raguser:ragpass@postgres:5432/ragdb
+      # Async URL: FastAPI / SQLAlchemy (asyncpg)
+      DATABASE_URL_ASYNC: postgresql+asyncpg://raguser:ragpass@postgres:5432/ragdb
     depends_on:
       postgres:
         condition: service_healthy
