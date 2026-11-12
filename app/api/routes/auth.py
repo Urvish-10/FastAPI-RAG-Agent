@@ -5,12 +5,19 @@ from sqlalchemy import select
 from app.db.database import get_db
 from app.models.models import User
 from app.schemas.schemas import UserRegister, UserLogin, TokenResponse, UserOut
+from app.core.config import settings
+from app.core.rate_limit import rate_limit
 from app.core.security import hash_password, verify_password, create_access_token, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/register",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(_login_limit)],
+)
 async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     if result.scalar_one_or_none():
@@ -25,7 +32,10 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     return user
 
 
-@router.post("/login", response_model=TokenResponse)
+_login_limit = rate_limit("login", lambda: settings.RATE_LIMIT_LOGIN_PER_MIN)
+
+
+@router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])
 async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email))
     user = result.scalar_one_or_none()

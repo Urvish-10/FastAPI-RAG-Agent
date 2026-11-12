@@ -34,7 +34,7 @@ POST /sessions/{id}/chat
   → Load conversation history from PostgreSQL (LangGraph AsyncPostgresSaver)
   → [retrieve node]  Pinecone query → top-20 chunks (user's namespace only)
   → [rerank node]    Pinecone Inference API (bge-reranker-v2-m3) → top-5 chunks
-  → [generate node]  Gemini 3.7 Flash with history + reranked context
+  → [generate node]  Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`) with history + reranked context
   → Stream SSE tokens back to client
   → Persist assistant message + sources to DB
 ```
@@ -65,7 +65,7 @@ POST /sessions/{id}/chat
 |---|---|
 | API Framework | FastAPI + Uvicorn |
 | Agent Orchestration | LangGraph `StateGraph` |
-| LLM | Google Gemini 3.7 Flash |
+| LLM | Google Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`) |
 | Embeddings | Gemini `gemini-embedding-001` (768-dim) |
 | Vector Store | Pinecone (serverless) |
 | Reranking | Pinecone Inference API (`bge-reranker-v2-m3`) |

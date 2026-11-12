@@ -2,7 +2,7 @@
 LangGraph RAG Agent
 
 Graph flow:
-  START → retrieve → rerank → generate → END
+  START → rewrite → retrieve → rerank → generate → END
 
 The graph is compiled once at startup.
 Each conversation uses a unique thread_id (session_id) so
@@ -37,6 +37,8 @@ class RAGState(TypedDict):
     # Set per request, not persisted in checkpoint
     user_id: str
     query: str
+    # Optional restriction of retrieval to specific documents
+    document_ids: Optional[List[str]]
     # Filled by retrieve node
     raw_chunks: List[Dict[str, Any]]
     # Filled by rerank node
@@ -79,6 +81,18 @@ If no context is provided, politely inform the user that no documents have been 
 MAX_HISTORY_MESSAGES = 20
 
 
+def _content_text(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(
+            b if isinstance(b, str) else b.get("text", "")
+            for b in content
+            if isinstance(b, str) or (isinstance(b, dict) and b.get("type") == "text")
+        )
+    return ""
+
+
 def _build_system_message(context: str) -> SystemMessage:
     if context:
         return SystemMessage(
@@ -99,6 +113,37 @@ def _window_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
     return window
 
 
+REWRITE_PROMPT = """Rewrite the user's latest question as a standalone search query, \
+resolving pronouns and references using the conversation. Do not answer it. \
+Output only the rewritten query."""
+
+
+async def rewrite_node(state: RAGState) -> dict:
+    """Turn follow-up questions into standalone retrieval queries."""
+    messages = state.get("messages", [])
+    if len(messages) <= 1:
+        return {}
+
+    convo = "\n".join(
+        f"{'User' if isinstance(m, HumanMessage) else 'Assistant'}: {m.content}"
+        for m in _window_messages(messages)[-6:]
+        if isinstance(m, (HumanMessage, AIMessage))
+    )
+    try:
+        resp = await _get_llm().ainvoke(
+            [SystemMessage(content=REWRITE_PROMPT), HumanMessage(content=convo)]
+        )
+        rewritten = _content_text(resp.content).strip()
+    except Exception as e:  # fall back to the raw question
+        logger.warning(f"Query rewrite failed, using original: {e}")
+        return {}
+
+    if not rewritten:
+        return {}
+    logger.info("Query rewritten for retrieval")
+    return {"query": rewritten}
+
+
 async def retrieve_node(state: RAGState) -> dict:
     """Query Pinecone for top-K chunks (sync SDK calls run in a worker thread)."""
     query = state["query"]
@@ -111,6 +156,7 @@ async def retrieve_node(state: RAGState) -> dict:
         query=query,
         namespace=user_id,
         top_k=settings.RETRIEVAL_TOP_K,
+        document_ids=state.get("document_ids"),
     )
 
     return {"raw_chunks": raw_chunks}
@@ -132,6 +178,10 @@ async def rerank_node(state: RAGState) -> dict:
         top_n=settings.RERANK_TOP_N,
     )
 
+    reranked = [
+        c for c in reranked
+        if c.get("rerank_score", 0.0) >= settings.RERANK_MIN_SCORE
+    ]
     context, sources = build_context_string(reranked)
 
     return {
@@ -160,11 +210,13 @@ async def generate_node(state: RAGState) -> dict:
 def build_graph(checkpointer: AsyncPostgresSaver) -> StateGraph:
     graph = StateGraph(RAGState)
 
+    graph.add_node("rewrite", rewrite_node)
     graph.add_node("retrieve", retrieve_node)
     graph.add_node("rerank", rerank_node)
     graph.add_node("generate", generate_node)
 
-    graph.add_edge(START, "retrieve")
+    graph.add_edge(START, "rewrite")
+    graph.add_edge("rewrite", "retrieve")
     graph.add_edge("retrieve", "rerank")
     graph.add_edge("rerank", "generate")
     graph.add_edge("generate", END)

@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from typing import Optional
@@ -24,7 +25,7 @@ class Settings(BaseSettings):
 
     # Google Gemini
     GEMINI_API_KEY: str
-    GEMINI_CHAT_MODEL: str = "gemini-2.0-flash"
+    GEMINI_CHAT_MODEL: str = "gemini-3.5-flash-lite"
     GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
     GEMINI_EMBEDDING_DIMENSIONS: int = 768
 
@@ -34,6 +35,7 @@ class Settings(BaseSettings):
     # RAG parameters
     RETRIEVAL_TOP_K: int = 20       # Fetch from Pinecone
     RERANK_TOP_N: int = 5           # Keep after reranking
+    RERANK_MIN_SCORE: float = 0.0   # Drop reranked chunks below this score (0 = keep all)
     CHUNK_SIZE: int = 1000
     CHUNK_OVERLAP: int = 200
     MAX_CONTEXT_TOKENS: int = 8000  # Limit context sent to LLM
@@ -45,6 +47,24 @@ class Settings(BaseSettings):
     # JWT (simple API-key auth for now)
     SECRET_KEY: str
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+
+    # CORS: comma-separated list of allowed origins (no wildcard with credentials)
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:8000"
+
+    # Rate limits (per client IP, per minute; in-process)
+    RATE_LIMIT_LOGIN_PER_MIN: int = 10
+    RATE_LIMIT_CHAT_PER_MIN: int = 30
+
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def _strong_secret(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters")
+        return v
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     class Config:
         env_file = ".env"

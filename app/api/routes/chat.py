@@ -13,7 +13,10 @@ from app.schemas.schemas import (
     ChatMessageOut, ChatHistoryResponse,
 )
 from app.core.security import get_current_user
+from app.core.config import settings
 from app.core.logging import get_logger
+from app.core.rate_limit import rate_limit
+from app.agent.graph import get_checkpointer
 from app.agent.runner import run_rag_query, stream_rag_query
 
 logger = get_logger(__name__)
@@ -71,6 +74,11 @@ async def delete_session(
 ):
     session = await _get_user_session(session_id, current_user["sub"], db)
     await db.delete(session)
+    # Also drop the LangGraph checkpoint thread for this conversation
+    try:
+        await get_checkpointer().adelete_thread(session_id)
+    except Exception as e:
+        logger.warning(f"Failed to delete checkpoint thread {session_id}: {e}")
 
 
 # ── Chat history ──────────────────────────────────────────────────────────────
@@ -98,7 +106,10 @@ async def get_history(
 
 # ── Chat endpoint ─────────────────────────────────────────────────────────────
 
-@router.post("/{session_id}/chat")
+_chat_limit = rate_limit("chat", lambda: settings.RATE_LIMIT_CHAT_PER_MIN)
+
+
+@router.post("/{session_id}/chat", dependencies=[Depends(_chat_limit)])
 async def chat(
     session_id: str,
     payload: ChatRequest,
@@ -137,6 +148,7 @@ async def chat(
                     user_id=user_id,
                     session_id=session_id,
                     query=payload.message,
+                    document_ids=payload.document_ids,
                 ):
                     if sse_chunk.startswith("data: "):
                         data = json.loads(sse_chunk[6:])
@@ -184,6 +196,7 @@ async def chat(
             user_id=user_id,
             session_id=session_id,
             query=payload.message,
+            document_ids=payload.document_ids,
         )
 
         assistant_msg = ChatMessage(

@@ -1,24 +1,10 @@
-from typing import List, Dict, Any, Optional
-from pinecone import Pinecone
+from typing import List, Dict, Any
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.services.vector_store import get_pinecone_client
 
 logger = get_logger(__name__)
-
-_pinecone_client: Optional[Pinecone] = None
-
-
-def get_pinecone_client() -> Pinecone:
-    """
-    Reuse the same Pinecone client singleton.
-    No new API key needed — reranking uses PINECONE_API_KEY.
-    """
-    global _pinecone_client
-    if _pinecone_client is None:
-        _pinecone_client = Pinecone(api_key=settings.PINECONE_API_KEY)
-    return _pinecone_client
-
 
 def rerank_chunks(
     query: str,

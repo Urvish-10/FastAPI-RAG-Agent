@@ -8,7 +8,7 @@ so only the NEW user message is passed in on each call.
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, List, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 
@@ -34,7 +34,9 @@ def _text_of(content: Any) -> str:
     return ""
 
 
-def _initial_state(user_id: str, query: str) -> RAGState:
+def _initial_state(
+    user_id: str, query: str, document_ids: Optional[List[str]] = None
+) -> RAGState:
     safe_query = sanitize_text(query)
     return {
         # The checkpointer supplies prior turns; add_messages appends this one.
@@ -42,6 +44,7 @@ def _initial_state(user_id: str, query: str) -> RAGState:
         "user_id": user_id,
         # Per-request fields are reset every turn
         "query": safe_query,
+        "document_ids": document_ids,
         "raw_chunks": [],
         "reranked_chunks": [],
         "sources": [],
@@ -57,11 +60,12 @@ async def run_rag_query(
     user_id: str,
     session_id: str,
     query: str,
+    document_ids: Optional[List[str]] = None,
 ) -> Tuple[str, List[Dict[str, Any]]]:
     """Non-streaming query. Returns (answer_text, sources)."""
     graph = get_graph()
     final_state = await graph.ainvoke(
-        _initial_state(user_id, query), config=_config(session_id)
+        _initial_state(user_id, query, document_ids), config=_config(session_id)
     )
 
     ai_messages = [m for m in final_state["messages"] if isinstance(m, AIMessage)]
@@ -79,6 +83,7 @@ async def stream_rag_query(
     user_id: str,
     session_id: str,
     query: str,
+    document_ids: Optional[List[str]] = None,
 ) -> AsyncIterator[str]:
     """
     Streaming query through the compiled graph.
@@ -93,7 +98,7 @@ async def stream_rag_query(
     token_count = 0
 
     async for mode, payload in graph.astream(
-        _initial_state(user_id, query),
+        _initial_state(user_id, query, document_ids),
         config=_config(session_id),
         stream_mode=["messages", "updates"],
     ):
