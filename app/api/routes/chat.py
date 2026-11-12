@@ -1,13 +1,13 @@
 from typing import List
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from app.db.database import get_db
-from app.models.models import ChatSession, ChatMessage, Document, DocumentStatus
+from app.db.database import get_db, AsyncSessionLocal
+from app.models.models import ChatSession, ChatMessage
 from app.schemas.schemas import (
     SessionCreate, SessionOut, ChatRequest,
     ChatMessageOut, ChatHistoryResponse,
@@ -41,8 +41,8 @@ async def create_session(
 async def list_sessions(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
 ):
     result = await db.execute(
         select(ChatSession)
@@ -114,74 +114,60 @@ async def chat(
     The agent:
     1. Retrieves top-20 chunks from Pinecone (user namespace)
     2. Reranks to top-5 with Pinecone Inference API (bge-reranker-v2-m3)
-    3. Generates answer with Gemini using conversation history + context
+    3. Generates answer with Gemini using checkpointed history + context
     """
     user_id = current_user["sub"]
-    session = await _get_user_session(session_id, user_id, db)
+    await _get_user_session(session_id, user_id, db)
 
-    # Verify user has at least one ready document
-    doc_result = await db.execute(
-        select(Document).where(
-            Document.user_id == user_id,
-            Document.status == DocumentStatus.READY,
-        ).limit(1)
-    )
-    has_docs = doc_result.scalar_one_or_none() is not None
-
-    # Load existing history (last 20 messages to cap context)
-    history_result = await db.execute(
-        select(ChatMessage)
-        .where(ChatMessage.session_id == session_id)
-        .order_by(ChatMessage.created_at.asc())
-        .limit(20)
-    )
-    history = history_result.scalars().all()
-
-    # Save user message immediately
-    user_msg = ChatMessage(
-        session_id=session_id,
-        role="user",
-        content=payload.message,
-    )
-    db.add(user_msg)
-    await db.flush()
+    # Save the user message and commit now, so it is durable regardless of how
+    # the (possibly long-lived) response stream ends. Prior turns come from the
+    # LangGraph checkpointer, not from this table.
+    db.add(ChatMessage(session_id=session_id, role="user", content=payload.message))
+    await db.commit()
 
     if payload.stream:
         # --- Streaming path ---
         async def event_generator():
             full_answer = []
             final_sources = []
+            completed = False
 
             try:
                 async for sse_chunk in stream_rag_query(
                     user_id=user_id,
                     session_id=session_id,
                     query=payload.message,
-                    history_messages=list(history),
                 ):
-                    # Parse internally to capture answer + sources for DB save
                     if sse_chunk.startswith("data: "):
                         data = json.loads(sse_chunk[6:])
                         if data["type"] == "token":
                             full_answer.append(data["content"])
                         elif data["type"] == "sources":
                             final_sources = data["sources"]
+                        elif data["type"] == "done":
+                            completed = True
 
                     yield sse_chunk
 
-                # Save assistant message to DB after stream completes
-                assistant_msg = ChatMessage(
-                    session_id=session_id,
-                    role="assistant",
-                    content="".join(full_answer),
-                    sources=final_sources,
-                )
-                async with db.begin_nested():
-                    db.add(assistant_msg)
-
             except Exception as e:
                 logger.error(f"Streaming error for session {session_id}: {e}", exc_info=True)
-                yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Failed to generate a response'})}\n\n"
+
+            finally:
+                # Persist with a dedicated session: the request-scoped `db` may
+                # already be closed by the time the stream finishes.
+                if completed and full_answer:
+                    try:
+                        async with AsyncSessionLocal() as save_db:
+                            save_db.add(ChatMessage(
+                                session_id=session_id,
+                                role="assistant",
+                                content="".join(full_answer),
+                                sources=final_sources,
+                            ))
+                            await save_db.commit()
+                    except Exception as e:
+                        logger.error(f"Failed to save assistant message: {e}", exc_info=True)
 
         return StreamingResponse(
             event_generator(),
@@ -198,7 +184,6 @@ async def chat(
             user_id=user_id,
             session_id=session_id,
             query=payload.message,
-            history_messages=list(history),
         )
 
         assistant_msg = ChatMessage(

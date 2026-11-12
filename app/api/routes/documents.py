@@ -3,7 +3,7 @@ import uuid
 import aiofiles
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
@@ -87,8 +87,8 @@ async def upload_document(
 async def list_documents(
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    skip: int = 0,
-    limit: int = 50,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
 ):
     """List all documents for the authenticated user."""
     user_id = current_user["sub"]

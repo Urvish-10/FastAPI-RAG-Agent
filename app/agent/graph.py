@@ -10,7 +10,8 @@ PostgresSaver checkpoints isolate history per session.
 """
 from __future__ import annotations
 
-from typing import Annotated, List, Dict, Any, Optional, AsyncIterator
+import asyncio
+from typing import Annotated, List, Dict, Any, Optional
 from typing_extensions import TypedDict
 
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
@@ -73,14 +74,40 @@ If no context is provided, politely inform the user that no documents have been 
 
 # ── Nodes ─────────────────────────────────────────────────────────────────────
 
-def retrieve_node(state: RAGState) -> dict:
-    """Query Pinecone for top-K chunks using the user's question."""
+# Max prior messages sent to the LLM. The checkpointer stores the full thread;
+# we only window what goes into the prompt.
+MAX_HISTORY_MESSAGES = 20
+
+
+def _build_system_message(context: str) -> SystemMessage:
+    if context:
+        return SystemMessage(
+            content=(
+                f"{SYSTEM_PROMPT}\n\n"
+                f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
+            )
+        )
+    return SystemMessage(content=SYSTEM_PROMPT)
+
+
+def _window_messages(messages: List[BaseMessage]) -> List[BaseMessage]:
+    """Keep the most recent messages, starting on a human turn."""
+    window = messages[-MAX_HISTORY_MESSAGES:]
+    for i, m in enumerate(window):
+        if isinstance(m, HumanMessage):
+            return window[i:]
+    return window
+
+
+async def retrieve_node(state: RAGState) -> dict:
+    """Query Pinecone for top-K chunks (sync SDK calls run in a worker thread)."""
     query = state["query"]
     user_id = state["user_id"]
 
-    logger.info(f"Retrieving chunks for user={user_id} query='{query[:60]}...'")
+    logger.info(f"Retrieving chunks for user={user_id}")
 
-    raw_chunks = query_chunks(
+    raw_chunks = await asyncio.to_thread(
+        query_chunks,
         query=query,
         namespace=user_id,
         top_k=settings.RETRIEVAL_TOP_K,
@@ -89,7 +116,7 @@ def retrieve_node(state: RAGState) -> dict:
     return {"raw_chunks": raw_chunks}
 
 
-def rerank_node(state: RAGState) -> dict:
+async def rerank_node(state: RAGState) -> dict:
     """Rerank retrieved chunks with Pinecone Inference API, then build context string."""
     query = state["query"]
     raw_chunks = state.get("raw_chunks", [])
@@ -98,7 +125,8 @@ def rerank_node(state: RAGState) -> dict:
         logger.warning("No chunks to rerank — skipping")
         return {"reranked_chunks": [], "context": "", "sources": []}
 
-    reranked = rerank_chunks(
+    reranked = await asyncio.to_thread(
+        rerank_chunks,
         query=query,
         chunks=raw_chunks,
         top_n=settings.RERANK_TOP_N,
@@ -113,60 +141,18 @@ def rerank_node(state: RAGState) -> dict:
     }
 
 
-def generate_node(state: RAGState) -> dict:
-    """Generate answer using Gemini with conversation history + retrieved context."""
-    context = state.get("context", "")
-    messages = state.get("messages", [])
-
-    llm = _get_llm(streaming=False)
-
-    # Build system message with context injected
-    if context:
-        system_content = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
-    else:
-        system_content = SYSTEM_PROMPT
-
-    system_msg = SystemMessage(content=system_content)
-
-    # Compose: system + full history (history already contains the current user message)
-    full_messages = [system_msg] + messages
-
-    logger.info(f"Generating answer. History length: {len(messages)} messages")
-
-    response = llm.invoke(full_messages)
-
-    return {"messages": [response]}
-
-
-async def generate_node_streaming(
-    state: RAGState,
-) -> AsyncIterator[str]:
+async def generate_node(state: RAGState) -> dict:
     """
-    Streaming version — yields token strings.
-    Called directly by the API route, not part of the compiled graph.
+    Generate the answer with Gemini. Uses ainvoke; when the graph is run with
+    stream_mode="messages", LangGraph surfaces the LLM tokens as they arrive.
     """
-    context = state.get("context", "")
-    messages = state.get("messages", [])
-
+    messages = _window_messages(state.get("messages", []))
     llm = _get_llm(streaming=True)
 
-    if context:
-        system_content = (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"=== DOCUMENT CONTEXT ===\n{context}\n=== END CONTEXT ==="
-        )
-    else:
-        system_content = SYSTEM_PROMPT
+    logger.info(f"Generating answer. Prompt history: {len(messages)} messages")
 
-    system_msg = SystemMessage(content=system_content)
-    full_messages = [system_msg] + messages
-
-    async for chunk in llm.astream(full_messages):
-        if chunk.content:
-            yield chunk.content
+    response = await llm.ainvoke([_build_system_message(state.get("context", ""))] + messages)
+    return {"messages": [response]}
 
 
 # ── Graph compilation ─────────────────────────────────────────────────────────
