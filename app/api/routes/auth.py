@@ -11,6 +11,8 @@ from app.core.security import hash_password, verify_password, create_access_toke
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+_login_limit = rate_limit("login", lambda: settings.RATE_LIMIT_LOGIN_PER_MIN)
+
 
 @router.post(
     "/register",
@@ -30,9 +32,6 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(user)
     await db.flush()
     return user
-
-
-_login_limit = rate_limit("login", lambda: settings.RATE_LIMIT_LOGIN_PER_MIN)
 
 
 @router.post("/login", response_model=TokenResponse, dependencies=[Depends(_login_limit)])

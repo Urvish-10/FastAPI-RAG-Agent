@@ -14,3 +14,6 @@ docs
 # RAG eval outputs
 eval_results/
 app/evaluation/eval_context.json
+
+# Local progress tracking (not committed)
+PLAN.md

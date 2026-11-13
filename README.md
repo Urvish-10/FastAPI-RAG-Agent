@@ -32,7 +32,8 @@ POST /documents/upload
 ```
 POST /sessions/{id}/chat
   → Load conversation history from PostgreSQL (LangGraph AsyncPostgresSaver)
-  → [retrieve node]  Pinecone query → top-20 chunks (user's namespace only)
+  → [rewrite node]   Turn follow-ups into a standalone search query (uses history)
+  → [retrieve node]  Pinecone query → top-20 chunks (user's namespace, optional document_ids filter)
   → [rerank node]    Pinecone Inference API (bge-reranker-v2-m3) → top-5 chunks
   → [generate node]  Gemini 3.5 Flash-Lite (`gemini-3.5-flash-lite`) with history + reranked context
   → Stream SSE tokens back to client
@@ -114,6 +115,14 @@ rag-agent/
 │   │   ├── vector_store.py       # Pinecone: upsert, query, delete
 │   │   ├── reranker.py           # Pinecone Inference reranking
 │   │   └── pdf_processor.py      # PDF loading, chunking, context building
+│   ├── evaluation/               # Local RAG evaluation harness (see below)
+│   │   ├── ingest.py             # Ingest docs/*.pdf into the eval namespace
+│   │   ├── runner.py             # Run the graph per question, record chunks/answers
+│   │   ├── metrics.py            # hit@k, recall@k, MRR, rerank lift, thresholds
+│   │   ├── judge.py              # LLM judge: correctness, faithfulness, abstention
+│   │   ├── report.py             # Rebuild reports from saved results (no API calls)
+│   │   ├── verify_dataset.py     # Check evidence phrases exist on the stated PDF page
+│   │   └── datasets/policy_docs_qa.json
 │   ├── agent/
 │   │   ├── graph.py              # LangGraph StateGraph definition + nodes
 │   │   └── runner.py             # Agent invocation + SSE streaming adapter
@@ -125,6 +134,8 @@ rag-agent/
 │       ├── documents.py          # /documents endpoints
 │       └── chat.py               # /sessions + /chat endpoints
 ├── alembic/                      # DB migration scripts
+├── scripts/clean_db.py           # Local DB cleanup (dry-run default, never touches users)
+├── tests/                        # pytest suite
 ├── docker-compose.yml            # PostgreSQL + Redis + app + worker
 ├── Dockerfile
 ├── pyproject.toml
@@ -174,6 +185,55 @@ uv run celery -A app.tasks.celery_app worker --pool=threads --concurrency=4 --lo
 ```
 
 API docs available at: `http://localhost:8000/docs`
+
+---
+
+## Evaluation
+
+A fully local harness measures retrieval and answer quality. Nothing is sent to third-party evaluation services: only Pinecone and Gemini/Gemma (the services the app already uses) are called, and results stay on disk in `eval_results/` (gitignored).
+
+**Corpus and dataset.** Put PDFs in `docs/` (gitignored). The shipped dataset, `app/evaluation/datasets/policy_docs_qa.json`, has 40 questions over 11 policy/handbook PDFs: 24 direct, 8 synthesis (including cross-document comparisons) and 8 unanswerable. Each answerable question lists the document, 1-based page and a phrase that must appear on that page; `verify_dataset` checks this.
+
+```bash
+# 1. Ingest docs/*.pdf into the isolated Pinecone namespace (EVAL_NAMESPACE, default "eval")
+uv run python -m app.evaluation.ingest            # add --force to re-ingest
+
+# 2. Confirm every evidence phrase is on its stated page
+uv run python -m app.evaluation.verify_dataset
+
+# 3. Run retrieval + generation for every question
+uv run python -m app.evaluation.runner            # --no-generate, --limit N, --concurrency N
+
+# 4. Judge the answers with an LLM (resumable; default judge is EVAL_JUDGE_MODEL)
+uv run python -m app.evaluation.judge eval_results/<timestamp>   # --model <name>, --concurrency N
+
+# Rebuild metrics/report from saved results without any API calls
+uv run python -m app.evaluation.report eval_results/<timestamp>
+```
+
+`run_dir` is optional for judge and report (defaults to the latest run). Check each module's `--help` for details.
+
+**Metrics.** Retrieval: hit@k, recall@k, MRR and document hit@5, for both the raw vector results and the reranked results (so the lift from reranking is visible), broken down by question category. Generation: correctness, faithfulness, false refusals, and whether unanswerable questions were refused instead of hallucinated.
+
+**Baseline** (40 questions, generation on `gemini-3.5-flash-lite`, judged by `gemma-4-31b-it`):
+
+| Metric | Result |
+|---|---|
+| Retrieval hit@5 / MRR (answerable) | 1.00 / 0.93 |
+| Synthesis recall@5, raw to reranked | 0.71 to 0.90 |
+| Faithfulness (answerable) | 1.00 |
+| Correctness (answerable) | 0.89 |
+| Unanswerable refused | 8 / 8 |
+
+Known weak spot: cross-document comparison questions, where retrieval can miss the page from the second document.
+
+**Notes.** The Gemini free tier allows roughly 20 requests per day per model, so the default judge is `gemma-4-31b-it`, which is not capped that way. The embedding step is rate-limited by `EMBED_REQUESTS_PER_MIN`. A reranker score threshold cannot reliably drive abstention on this corpus (unanswerable questions scored up to 0.94), so `RERANK_MIN_SCORE` stays at 0.
+
+### Tests
+
+```bash
+uv run pytest
+```
 
 ---
 
